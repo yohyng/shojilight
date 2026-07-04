@@ -1,0 +1,708 @@
+<meta charset="utf-8" />
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+/>
+<meta name="theme-color" content="#f6f1e7" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>庭園の写ろい — Transient Teien Colors</title>
+
+<style>
+  /* ------------------------------------------------------------------ *
+   *  庭園の写ろい / Transient Teien Colors
+   *  A single-file, dependency-free interior colour-art canvas.
+   * ------------------------------------------------------------------ */
+  :root {
+    --panel-bg: rgba(250, 248, 243, 0.72);
+    --panel-line: rgba(120, 110, 95, 0.18);
+    --ink: #55503f;
+    --ink-soft: rgba(85, 80, 63, 0.55);
+    --active: rgba(255, 255, 255, 0.9);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #f6f1e7;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+      "Hiragino Kaku Gothic ProN", "Yu Gothic", "Segoe UI", sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none;
+    overscroll-behavior: none;
+  }
+
+  #stage {
+    position: fixed;
+    inset: 0;
+    display: block;
+  }
+
+  /* The low-resolution canvas is upscaled to 100% by the browser,
+     letting bilinear interpolation dissolve every hard edge. */
+  #teien {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    image-rendering: auto;
+  }
+
+  /* ---------------------------- Settings ---------------------------- */
+  #panel {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    transform: translate(-50%, 0);
+    width: min(92vw, 560px);
+    padding: 16px 20px 22px;
+    background: var(--panel-bg);
+    backdrop-filter: blur(22px) saturate(1.3);
+    -webkit-backdrop-filter: blur(22px) saturate(1.3);
+    border: 1px solid var(--panel-line);
+    border-bottom: none;
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -8px 40px rgba(70, 60, 45, 0.1);
+    transition: transform 0.72s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.72s ease;
+    z-index: 20;
+  }
+
+  /* Fully retracted — the panel disappears completely, leaving only
+     colour behind (Ver. 5.0 格納ギミック). */
+  #panel.hidden {
+    transform: translate(-50%, calc(100% + 4px));
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Grip handle, always reachable to bring the panel home. */
+  #grip {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 74px;
+    height: 30px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 9px;
+    cursor: pointer;
+  }
+  #grip::before {
+    content: "";
+    width: 44px;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(120, 110, 95, 0.4);
+    transition: background 0.3s ease;
+  }
+  #grip:active::before {
+    background: rgba(120, 110, 95, 0.65);
+  }
+
+  /* A faint whisper of a tab, the only thing left once hidden, to invite
+     the panel back without any obvious "button". */
+  #recall {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 26px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 7px;
+    z-index: 19;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+    cursor: pointer;
+  }
+  #recall.show {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #recall::before {
+    content: "";
+    width: 46px;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(120, 110, 95, 0.22);
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .row:first-of-type {
+    margin-top: 4px;
+  }
+  .label {
+    font-size: 10px;
+    letter-spacing: 0.32em;
+    color: var(--ink-soft);
+    margin: 2px 0 -2px 4px;
+  }
+
+  .seg {
+    flex: 1;
+    border: none;
+    background: rgba(255, 255, 255, 0.34);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    padding: 11px 0 12px;
+    border-radius: 13px;
+    cursor: pointer;
+    transition: background 0.35s ease, transform 0.2s ease,
+      box-shadow 0.35s ease, color 0.35s ease;
+  }
+  .seg .en {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    opacity: 0.5;
+    margin-top: 3px;
+    font-weight: 400;
+  }
+  .seg:active {
+    transform: scale(0.96);
+  }
+  .seg.on {
+    background: var(--active);
+    color: #3d3928;
+    box-shadow: 0 4px 16px rgba(80, 70, 50, 0.16),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+  }
+
+  .title {
+    font-size: 12px;
+    letter-spacing: 0.42em;
+    color: var(--ink-soft);
+    text-align: center;
+    padding-right: 0;
+    margin-bottom: 2px;
+    font-weight: 500;
+  }
+</style>
+
+<div id="stage">
+  <canvas id="teien"></canvas>
+</div>
+
+<div id="recall" title="設定"></div>
+
+<div id="panel">
+  <div id="grip" title="スライドで格納"></div>
+  <div class="title">庭園の写ろい</div>
+
+  <div class="label">季 節 &nbsp;/&nbsp; SEASON</div>
+  <div class="row" id="seasonRow">
+    <button class="seg" data-season="spring">春<span class="en">SPRING</span></button>
+    <button class="seg" data-season="summer">夏<span class="en">SUMMER</span></button>
+    <button class="seg" data-season="autumn">秋<span class="en">AUTUMN</span></button>
+    <button class="seg" data-season="winter">冬<span class="en">WINTER</span></button>
+  </div>
+
+  <div class="label">天 候 &nbsp;/&nbsp; WEATHER</div>
+  <div class="row" id="weatherRow">
+    <button class="seg" data-weather="sunny">晴<span class="en">SUNNY</span></button>
+    <button class="seg" data-weather="rainy">雨<span class="en">RAINY</span></button>
+    <button class="seg" data-weather="cloudy">曇<span class="en">CLOUDY</span></button>
+    <button class="seg" data-weather="snowy">雪<span class="en">SNOWY</span></button>
+  </div>
+</div>
+
+<script>
+  "use strict";
+
+  /* ================================================================== *
+   *  四季のリアル・カラーデータベース (RGB)
+   *  実景の日本庭園写真から抽出し、濁りを取り除いた「絵の具の純色」。
+   * ================================================================== */
+  const teienColorDatabase = {
+    summer: [
+      { r: 195, g: 235, b: 90 },  // 光を透過した竹林の鮮烈なライム
+      { r: 110, g: 190, b: 245 }, // 池に反射するスカイシアンブルー
+      { r: 75,  g: 165, b: 65 },  // 瑞々しい楓のフォレストグリーン
+      { r: 245, g: 235, b: 220 }, // 温かみのある白砂
+      { r: 115, g: 190, b: 105 }, // 陽射しにきらめく若い笹
+      { r: 155, g: 215, b: 170 }, // 柔らかな日陰のミントグリーン
+      { r: 255, g: 240, b: 160 }, // 木漏れ日のまばゆい黄金
+      { r: 70,  g: 175, b: 210 }, // 潤いを湛えた池のエメラルドブルー
+      { r: 145, g: 190, b: 130 }, // 深い緑を保つ日陰の苔
+    ],
+    spring: [
+      { r: 255, g: 215, b: 225 }, // 淡いソメイヨシノの桜桃色
+      { r: 245, g: 155, b: 180 }, // 艶やかな八重桜の紅
+      { r: 195, g: 238, b: 100 }, // 萌え出る若葉の黄緑
+      { r: 120, g: 195, b: 245 }, // 春先の清涼な青空
+      { r: 110, g: 185, b: 90 },  // 濡れた苔庭の緑
+      { r: 248, g: 242, b: 235 }, // ピンクが反射した飛び石の白
+      { r: 255, g: 235, b: 150 }, // 春の柔らかい黄金の光
+      { r: 165, g: 215, b: 170 }, // 青空に映える若楓
+    ],
+    autumn: [
+      { r: 245, g: 75,  b: 50 },  // 燃え盛る大カエデの緋赤
+      { r: 250, g: 145, b: 40 },  // 熟した柿のような深い橙
+      { r: 255, g: 210, b: 50 },  // イチョウの降り積もる黄金
+      { r: 145, g: 195, b: 70 },  // 赤くなりきらない黄緑のカエデ
+      { r: 100, g: 165, b: 80 },  // 常緑の苔庭 (発色対比)
+      { r: 242, g: 225, b: 205 }, // 落ち葉浮かぶ飛び石のベージュ
+      { r: 240, g: 105, b: 75 },  // 夕日に照り映える池の朱色
+      { r: 195, g: 165, b: 105 }, // 枯れゆくススキの寂びたゴールド
+    ],
+    winter: [
+      { r: 250, g: 252, b: 254 }, // 凛として積もる雪の純白
+      { r: 160, g: 200, b: 225 }, // 凍てつく冬空のアイシーブルー
+      { r: 238, g: 232, b: 222 }, // 庭石のまろやかな白
+      { r: 150, g: 170, b: 190 }, // 冬の薄光が作る薄灰色
+      { r: 240, g: 60,  b: 85 },  // 寒椿の高貴な薄紅 (アクセント)
+      { r: 110, g: 150, b: 120 }, // 霜に覆われた常緑の松
+      { r: 255, g: 235, b: 170 }, // 冬至の薄日ゴールド
+      { r: 190, g: 205, b: 215 }, // 凍った池面の氷のシルバー
+    ],
+  };
+
+  /* Weather presets — the paper the paint sits on, and its behaviour. */
+  const weatherPresets = {
+    sunny:  { base: [246, 241, 231], bleed: 1.0,  opacity: 1.0, wash: 0.26 },
+    rainy:  { base: [238, 240, 236], bleed: 1.0,  opacity: 1.2, wash: 0.22 },
+    cloudy: { base: [235, 236, 240], bleed: 1.2,  opacity: 0.92, wash: 0.17 },
+    snowy:  { base: [247, 249, 251], bleed: 1.0,  opacity: 1.0, wash: 0.24 },
+  };
+
+  /* ================================================================== *
+   *  Canvas & render surface
+   * ================================================================== */
+  const RENDER_SCALE = 0.5; // 低解像度Canvas → CSS拡大でバイリニアにじみ
+  const canvas = document.getElementById("teien");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  let W = 0, H = 0, MIN = 0;
+
+  const state = {
+    season: "summer",
+    weather: "sunny",
+  };
+
+  function resize() {
+    W = canvas.width = Math.max(2, Math.floor(window.innerWidth * RENDER_SCALE));
+    H = canvas.height = Math.max(2, Math.floor(window.innerHeight * RENDER_SCALE));
+    MIN = Math.min(W, H);
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  /* ---------------------------- helpers ----------------------------- */
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  function stepColor(c, target, t) {
+    c.r = lerp(c.r, target.r, t);
+    c.g = lerp(c.g, target.g, t);
+    c.b = lerp(c.b, target.b, t);
+  }
+
+  function palette() {
+    return teienColorDatabase[state.season];
+  }
+
+  /* ================================================================== *
+   *  ② 多色パッチ・システム — ColorDroplet
+   *  画面の10〜15%径の小さな真円を最大60個。個々に浮遊・バウンドさせ、
+   *  灰色に濁らず「豊かな多色テクスチャ」を保つ。
+   * ================================================================== */
+  class ColorDroplet {
+    constructor() {
+      this.x = rnd(0, W);
+      this.y = rnd(0, H);
+      const sp = 0.00035;
+      this.vx = rnd(-sp, sp);
+      this.vy = rnd(-sp, sp);
+      this.rBase = rnd(0.1, 0.16);
+      this.phase = rnd(0, Math.PI * 2);
+      this.pulse = rnd(0.4, 0.9);
+      const c = pick(palette());
+      this.c = { r: c.r, g: c.g, b: c.b };
+      this.target = pick(palette());
+      this.morph = rnd(0.0008, 0.0022);
+    }
+    retarget() {
+      this.target = pick(palette());
+    }
+    update(dt, t, bleed) {
+      // 微小浮遊 + 壁バウンド
+      this.x += this.vx * MIN * dt;
+      this.y += this.vy * MIN * dt;
+      if (this.x < 0) { this.x = 0; this.vx = Math.abs(this.vx); }
+      else if (this.x > W) { this.x = W; this.vx = -Math.abs(this.vx); }
+      if (this.y < 0) { this.y = 0; this.vy = Math.abs(this.vy); }
+      else if (this.y > H) { this.y = H; this.vy = -Math.abs(this.vy); }
+
+      // ゆるやかな色の写ろい
+      stepColor(this.c, this.target, this.morph * dt);
+      const d =
+        Math.abs(this.c.r - this.target.r) +
+        Math.abs(this.c.g - this.target.g) +
+        Math.abs(this.c.b - this.target.b);
+      if (d < 9) this.retarget();
+
+      this.r =
+        MIN *
+        this.rBase *
+        bleed *
+        (1 + 0.14 * Math.sin(t * this.pulse + this.phase));
+    }
+    draw(alpha) {
+      const { x, y, r, c } = this;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      const core = `${c.r | 0},${c.g | 0},${c.b | 0}`;
+      g.addColorStop(0, `rgba(${core},${alpha})`);
+      g.addColorStop(0.55, `rgba(${core},${alpha * 0.55})`);
+      g.addColorStop(1, `rgba(${core},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /* ================================================================== *
+   *  ③ 境界なきお庭の島 — GardenCircle
+   *  呼吸するように伸縮する12個の中景の色の島。奥行き(陰翳)を与える。
+   * ================================================================== */
+  class GardenCircle {
+    constructor() {
+      this.x = rnd(0, W);
+      this.y = rnd(0, H);
+      const sp = 0.00016;
+      this.vx = rnd(-sp, sp);
+      this.vy = rnd(-sp, sp);
+      this.rBase = rnd(0.2, 0.32);
+      this.breath = rnd(0.18, 0.4);
+      this.phase = rnd(0, Math.PI * 2);
+      const c = pick(palette());
+      this.c = { r: c.r, g: c.g, b: c.b };
+      this.target = pick(palette());
+    }
+    update(dt, t, bleed) {
+      this.x += this.vx * MIN * dt;
+      this.y += this.vy * MIN * dt;
+      if (this.x < -MIN * 0.2) this.x = W + MIN * 0.2;
+      else if (this.x > W + MIN * 0.2) this.x = -MIN * 0.2;
+      if (this.y < -MIN * 0.2) this.y = H + MIN * 0.2;
+      else if (this.y > H + MIN * 0.2) this.y = -MIN * 0.2;
+
+      stepColor(this.c, this.target, 0.0012 * dt);
+      const d =
+        Math.abs(this.c.r - this.target.r) +
+        Math.abs(this.c.g - this.target.g) +
+        Math.abs(this.c.b - this.target.b);
+      if (d < 10) this.target = pick(palette());
+
+      this.r =
+        MIN *
+        this.rBase *
+        bleed *
+        (1 + 0.22 * Math.sin(t * this.breath + this.phase));
+    }
+    draw(alpha) {
+      const { x, y, r, c } = this;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      const core = `${c.r | 0},${c.g | 0},${c.b | 0}`;
+      g.addColorStop(0, `rgba(${core},${alpha})`);
+      g.addColorStop(0.7, `rgba(${core},${alpha * 0.4})`);
+      g.addColorStop(1, `rgba(${core},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /* ================================================================== *
+   *  天候パーティクル
+   * ================================================================== */
+
+  // 晴 — 木漏れ日のきらめき粒子（ゴールド・シアン・ライトグリーン）
+  const komorebiColors = ["255,240,175", "150,220,240", "185,235,150"];
+  class Sparkle {
+    constructor() { this.reset(); this.life = rnd(0, 1); }
+    reset() {
+      this.x = rnd(0, W);
+      this.y = rnd(0, H);
+      this.r = rnd(0.006, 0.02) * MIN;
+      this.vx = rnd(-0.00006, 0.00006) * MIN;
+      this.vy = rnd(-0.00004, 0.00002) * MIN;
+      this.color = pick(komorebiColors);
+      this.life = 0;
+      this.max = rnd(3, 7);
+      this.age = 0;
+    }
+    update(dt) {
+      this.age += dt / 1000;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      // 浮遊しては溶けて消える
+      const t = this.age / this.max;
+      this.life = Math.sin(Math.min(1, t) * Math.PI);
+      if (this.age >= this.max) this.reset();
+    }
+    draw() {
+      const g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r);
+      g.addColorStop(0, `rgba(${this.color},${0.75 * this.life})`);
+      g.addColorStop(1, `rgba(${this.color},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // 雨 — 繊細なしずくのさざなみ（雨紋）/ タップ波紋
+  class Ripple {
+    constructor(x, y, strength) {
+      this.x = x;
+      this.y = y;
+      this.r = 0;
+      this.max = rnd(0.08, 0.16) * MIN * (strength || 1);
+      this.speed = 0.055 * MIN * (strength ? 1.6 : 1);
+      this.life = 1;
+    }
+    update(dt) {
+      const s = dt / 16.67;
+      this.r += this.speed * s;
+      this.life = Math.max(0, 1 - this.r / this.max);
+    }
+    get dead() { return this.life <= 0; }
+    draw() {
+      if (this.r < 1) return;
+      const inner = Math.max(0, this.r - MIN * 0.03);
+      const g = ctx.createRadialGradient(this.x, this.y, inner, this.x, this.y, this.r);
+      g.addColorStop(0, "rgba(255,255,255,0)");
+      g.addColorStop(0.72, `rgba(255,255,255,${0.32 * this.life})`);
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // 雪 — フチを淡くぼかした真っ白な雪の粒子
+  class SnowFlake {
+    constructor() { this.reset(true); }
+    reset(spread) {
+      this.x = rnd(0, W);
+      this.y = spread ? rnd(0, H) : -0.03 * MIN;
+      this.r = rnd(0.006, 0.02) * MIN;
+      this.vy = rnd(0.012, 0.03) * MIN;
+      this.sway = rnd(0.004, 0.012) * MIN;
+      this.phase = rnd(0, Math.PI * 2);
+      this.freq = rnd(0.6, 1.4);
+    }
+    update(dt, t) {
+      const s = dt / 16.67;
+      this.y += this.vy * s * 0.35;
+      this.x += Math.sin(t * this.freq + this.phase) * this.sway * s * 0.3;
+      if (this.y > H + 0.03 * MIN) this.reset(false);
+    }
+    draw() {
+      const g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r);
+      g.addColorStop(0, "rgba(255,255,255,0.95)");
+      g.addColorStop(0.5, "rgba(255,255,255,0.6)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /* ================================================================== *
+   *  シーン構築
+   * ================================================================== */
+  const droplets = [];
+  const gardens = [];
+  const sparkles = [];
+  const snow = [];
+  const ripples = [];
+  let rainTimer = 0;
+
+  function buildScene() {
+    droplets.length = 0;
+    gardens.length = 0;
+    for (let i = 0; i < 60; i++) droplets.push(new ColorDroplet());
+    for (let i = 0; i < 12; i++) gardens.push(new GardenCircle());
+    sparkles.length = 0;
+    for (let i = 0; i < 44; i++) sparkles.push(new Sparkle());
+    snow.length = 0;
+    for (let i = 0; i < 90; i++) snow.push(new SnowFlake());
+  }
+  buildScene();
+
+  // 季節変更時は色を破棄せず、各ノードのターゲットを差し替えて滑らかに移ろわせる
+  function reseasonTargets() {
+    for (const d of droplets) d.retarget();
+    for (const g of gardens) g.target = pick(palette());
+  }
+
+  /* ================================================================== *
+   *  描画ループ
+   * ================================================================== */
+  let last = performance.now();
+  let clock = 0;
+
+  function frame(now) {
+    let dt = now - last;
+    last = now;
+    if (dt > 60) dt = 60; // タブ復帰時の暴走防止
+    clock += dt / 1000;
+
+    const wp = weatherPresets[state.weather];
+
+    // 濡れ和紙のベース。半透明の塗り重ねが「じわーっと溶ける」持続を生む。
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = `rgba(${wp.base[0]},${wp.base[1]},${wp.base[2]},${wp.wash})`;
+    ctx.fillRect(0, 0, W, H);
+
+    // 中景の島 → 前景の多色ドロップ
+    for (const g of gardens) {
+      g.update(dt, clock, wp.bleed);
+      g.draw(0.3 * wp.opacity);
+    }
+    for (const d of droplets) {
+      d.update(dt, clock, wp.bleed);
+      d.draw(0.42 * wp.opacity);
+    }
+
+    // 天候演出
+    if (state.weather === "sunny") {
+      ctx.globalCompositeOperation = "lighter";
+      for (const s of sparkles) { s.update(dt); s.draw(); }
+      ctx.globalCompositeOperation = "source-over";
+    } else if (state.weather === "rainy") {
+      rainTimer -= dt;
+      if (rainTimer <= 0) {
+        ripples.push(new Ripple(rnd(0, W), rnd(0, H), 1));
+        rainTimer = rnd(140, 340);
+      }
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        ripples[i].update(dt);
+        ripples[i].draw();
+        if (ripples[i].dead) ripples.splice(i, 1);
+      }
+    } else if (state.weather === "snowy") {
+      for (const s of snow) { s.update(dt, clock); s.draw(); }
+      drawVignette();
+    }
+
+    // タップ波紋（全天候で反応）
+    if (state.weather !== "rainy") {
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        ripples[i].update(dt);
+        ripples[i].draw();
+        if (ripples[i].dead) ripples.splice(i, 1);
+      }
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  // 雪 — 画面の端をふんわり包む白い光の枠
+  function drawVignette() {
+    const g = ctx.createRadialGradient(
+      W / 2, H / 2, MIN * 0.35,
+      W / 2, H / 2, MIN * 0.95
+    );
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    g.addColorStop(1, "rgba(255,255,255,0.32)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  requestAnimationFrame(frame);
+
+  /* ================================================================== *
+   *  操作 — 季節 / 天候 / タップ波紋 / 格納パネル
+   * ================================================================== */
+  function syncButtons() {
+    document.querySelectorAll("[data-season]").forEach((b) =>
+      b.classList.toggle("on", b.dataset.season === state.season)
+    );
+    document.querySelectorAll("[data-weather]").forEach((b) =>
+      b.classList.toggle("on", b.dataset.weather === state.weather)
+    );
+    document.querySelector('meta[name="theme-color"]').setAttribute(
+      "content",
+      `rgb(${weatherPresets[state.weather].base.join(",")})`
+    );
+  }
+
+  document.getElementById("seasonRow").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-season]");
+    if (!b) return;
+    state.season = b.dataset.season;
+    reseasonTargets();
+    syncButtons();
+  });
+  document.getElementById("weatherRow").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-weather]");
+    if (!b) return;
+    state.weather = b.dataset.weather;
+    syncButtons();
+  });
+  syncButtons();
+
+  // タップ / クリックで波紋を落とす（UI以外の領域）
+  function spawnRipple(clientX, clientY) {
+    const x = clientX * RENDER_SCALE;
+    const y = clientY * RENDER_SCALE;
+    ripples.push(new Ripple(x, y, 1.6));
+  }
+  canvas.addEventListener("pointerdown", (e) => spawnRipple(e.clientX, e.clientY));
+
+  // 格納ギミック
+  const panel = document.getElementById("panel");
+  const recall = document.getElementById("recall");
+  function setPanel(hidden) {
+    panel.classList.toggle("hidden", hidden);
+    recall.classList.toggle("show", hidden);
+  }
+  document.getElementById("grip").addEventListener("click", (e) => {
+    e.stopPropagation();
+    setPanel(true);
+  });
+  recall.addEventListener("click", () => setPanel(false));
+
+  // 二重タップで簡易フルスクリーン（対応端末のみ）
+  let lastTap = 0;
+  document.getElementById("stage").addEventListener("pointerdown", () => {
+    const t = Date.now();
+    if (t - lastTap < 320) {
+      const el = document.documentElement;
+      if (!document.fullscreenElement && el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      }
+    }
+    lastTap = t;
+  });
+</script>
