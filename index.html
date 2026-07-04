@@ -192,6 +192,56 @@
       inset 0 0 0 1px rgba(255, 255, 255, 0.7);
   }
 
+  /* 動きスライダー（速さ / 強さ） */
+  .sliders {
+    display: flex;
+    gap: 18px;
+    margin-top: 10px;
+  }
+  .slider {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .stag {
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    color: var(--ink);
+    white-space: nowrap;
+    min-width: 2.4em;
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    height: 4px;
+    border-radius: 3px;
+    background: rgba(120, 110, 95, 0.24);
+    outline: none;
+    cursor: pointer;
+    touch-action: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--active);
+    box-shadow: 0 2px 9px rgba(80, 70, 50, 0.3),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 50%;
+    background: var(--active);
+    box-shadow: 0 2px 9px rgba(80, 70, 50, 0.3),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+  }
+
   .title {
     font-size: 12px;
     letter-spacing: 0.42em;
@@ -227,6 +277,18 @@
     <button class="seg" data-weather="rainy">雨<span class="en">RAINY</span></button>
     <button class="seg" data-weather="cloudy">曇<span class="en">CLOUDY</span></button>
     <button class="seg" data-weather="snowy">雪<span class="en">SNOWY</span></button>
+  </div>
+
+  <div class="label">動 き &nbsp;/&nbsp; MOTION</div>
+  <div class="sliders">
+    <div class="slider">
+      <span class="stag">速さ</span>
+      <input id="speed" type="range" min="0.15" max="2.6" step="0.05" value="1" aria-label="動きの速さ" />
+    </div>
+    <div class="slider">
+      <span class="stag">強さ</span>
+      <input id="intensity" type="range" min="0.3" max="2" step="0.05" value="1" aria-label="動きの強さ" />
+    </div>
   </div>
 </div>
 
@@ -300,7 +362,24 @@
   const state = {
     season: "summer",
     weather: "sunny",
+    speed: 1,      // 動きの速さ（時間スケール）
+    intensity: 1,  // 動きの強さ（移動量・脈動・波紋の強弱）
   };
+
+  // 設定の保存/復元（インテリア用途で開きっぱなしでも状態を保つ）
+  const STORE_KEY = "teien-settings";
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
+    if (saved.season && teienColorDatabase[saved.season]) state.season = saved.season;
+    if (saved.weather && weatherPresets[saved.weather]) state.weather = saved.weather;
+    if (typeof saved.speed === "number") state.speed = saved.speed;
+    if (typeof saved.intensity === "number") state.intensity = saved.intensity;
+  } catch (e) {}
+  function saveSettings() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    } catch (e) {}
+  }
 
   function resize() {
     W = canvas.width = Math.max(2, Math.floor(window.innerWidth * RENDER_SCALE));
@@ -348,10 +427,10 @@
     retarget() {
       this.target = pick(palette());
     }
-    update(dt, t, bleed) {
-      // 微小浮遊 + 壁バウンド
-      this.x += this.vx * MIN * dt;
-      this.y += this.vy * MIN * dt;
+    update(dt, t, bleed, intensity) {
+      // 微小浮遊 + 壁バウンド（強さで移動量が変化）
+      this.x += this.vx * MIN * dt * intensity;
+      this.y += this.vy * MIN * dt * intensity;
       if (this.x < 0) { this.x = 0; this.vx = Math.abs(this.vx); }
       else if (this.x > W) { this.x = W; this.vx = -Math.abs(this.vx); }
       if (this.y < 0) { this.y = 0; this.vy = Math.abs(this.vy); }
@@ -369,7 +448,7 @@
         MIN *
         this.rBase *
         bleed *
-        (1 + 0.14 * Math.sin(t * this.pulse + this.phase));
+        (1 + 0.14 * intensity * Math.sin(t * this.pulse + this.phase));
     }
     draw(alpha) {
       const { x, y, r, c } = this;
@@ -403,9 +482,9 @@
       this.c = { r: c.r, g: c.g, b: c.b };
       this.target = pick(palette());
     }
-    update(dt, t, bleed) {
-      this.x += this.vx * MIN * dt;
-      this.y += this.vy * MIN * dt;
+    update(dt, t, bleed, intensity) {
+      this.x += this.vx * MIN * dt * intensity;
+      this.y += this.vy * MIN * dt * intensity;
       if (this.x < -MIN * 0.2) this.x = W + MIN * 0.2;
       else if (this.x > W + MIN * 0.2) this.x = -MIN * 0.2;
       if (this.y < -MIN * 0.2) this.y = H + MIN * 0.2;
@@ -422,7 +501,7 @@
         MIN *
         this.rBase *
         bleed *
-        (1 + 0.22 * Math.sin(t * this.breath + this.phase));
+        (1 + 0.22 * intensity * Math.sin(t * this.breath + this.phase));
     }
     draw(alpha) {
       const { x, y, r, c } = this;
@@ -457,10 +536,10 @@
       this.max = rnd(3, 7);
       this.age = 0;
     }
-    update(dt) {
+    update(dt, intensity) {
       this.age += dt / 1000;
-      this.x += this.vx * dt;
-      this.y += this.vy * dt;
+      this.x += this.vx * dt * intensity;
+      this.y += this.vy * dt * intensity;
       // 浮遊しては溶けて消える
       const t = this.age / this.max;
       this.life = Math.sin(Math.min(1, t) * Math.PI);
@@ -575,7 +654,12 @@
     let dt = now - last;
     last = now;
     if (dt > 60) dt = 60; // タブ復帰時の暴走防止
-    clock += dt / 1000;
+
+    // 速さ = 時間スケール、強さ = 移動量・脈動・波紋の強弱
+    const S = state.speed;
+    const I = state.intensity;
+    const mdt = dt * S;
+    clock += (dt / 1000) * S;
 
     const wp = weatherPresets[state.weather];
 
@@ -586,39 +670,40 @@
 
     // 中景の島 → 前景の多色ドロップ
     for (const g of gardens) {
-      g.update(dt, clock, wp.bleed);
+      g.update(mdt, clock, wp.bleed, I);
       g.draw(0.3 * wp.opacity);
     }
     for (const d of droplets) {
-      d.update(dt, clock, wp.bleed);
+      d.update(mdt, clock, wp.bleed, I);
       d.draw(0.42 * wp.opacity);
     }
 
     // 天候演出
     if (state.weather === "sunny") {
       ctx.globalCompositeOperation = "lighter";
-      for (const s of sparkles) { s.update(dt); s.draw(); }
+      for (const s of sparkles) { s.update(mdt, I); s.draw(); }
       ctx.globalCompositeOperation = "source-over";
     } else if (state.weather === "rainy") {
-      rainTimer -= dt;
+      rainTimer -= mdt;
       if (rainTimer <= 0) {
         ripples.push(new Ripple(rnd(0, W), rnd(0, H), 1));
-        rainTimer = rnd(140, 340);
+        // 強いほど雨紋の間隔が縮まり、しずくが増える
+        rainTimer = rnd(140, 340) / I;
       }
       for (let i = ripples.length - 1; i >= 0; i--) {
-        ripples[i].update(dt);
+        ripples[i].update(mdt);
         ripples[i].draw();
         if (ripples[i].dead) ripples.splice(i, 1);
       }
     } else if (state.weather === "snowy") {
-      for (const s of snow) { s.update(dt, clock); s.draw(); }
+      for (const s of snow) { s.update(mdt, clock); s.draw(); }
       drawVignette();
     }
 
     // タップ波紋（全天候で反応）
     if (state.weather !== "rainy") {
       for (let i = ripples.length - 1; i >= 0; i--) {
-        ripples[i].update(dt);
+        ripples[i].update(mdt);
         ripples[i].draw();
         if (ripples[i].dead) ripples.splice(i, 1);
       }
@@ -663,14 +748,30 @@
     state.season = b.dataset.season;
     reseasonTargets();
     syncButtons();
+    saveSettings();
   });
   document.getElementById("weatherRow").addEventListener("click", (e) => {
     const b = e.target.closest("[data-weather]");
     if (!b) return;
     state.weather = b.dataset.weather;
     syncButtons();
+    saveSettings();
   });
   syncButtons();
+
+  // 動きスライダー（速さ / 強さ）
+  const speedEl = document.getElementById("speed");
+  const intensityEl = document.getElementById("intensity");
+  speedEl.value = state.speed;
+  intensityEl.value = state.intensity;
+  speedEl.addEventListener("input", () => {
+    state.speed = parseFloat(speedEl.value);
+    saveSettings();
+  });
+  intensityEl.addEventListener("input", () => {
+    state.intensity = parseFloat(intensityEl.value);
+    saveSettings();
+  });
 
   // タップ / クリックで波紋を落とす（UI以外の領域）
   function spawnRipple(clientX, clientY) {
